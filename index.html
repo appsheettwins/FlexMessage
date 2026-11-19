@@ -341,6 +341,24 @@
                         class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#06C755] outline-none text-sm">
                 </div>
 
+                <!-- กล่องสร้างลิงก์แชร์อัตโนมัติสำหรับปุ่มในการ์ด -->
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-3.5 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-blue-900"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> ลิงก์สำหรับปุ่ม "แชร์ให้เพื่อน" ในการ์ด</span>
+                        <button onclick="applyMagicShareLinkToButton()" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition">
+                            ใส่ลงปุ่มแชร์อัตโนมัติ
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-blue-700">ลิงก์นี้จะฝังข้อมูลการ์ดและ LIFF ID ไปด้วย เมื่อเพื่อนกดปุ่มแชร์ในการ์ด หน้าเลือกเพื่อนใน LINE จะเด้งขึ้นทันทีโดยไม่แสดงหน้าแก้ไขการ์ด</p>
+                    <div class="flex space-x-2">
+                        <input type="text" id="magicShareUrlOutput" readonly placeholder="กรุณากรอก LIFF ID ด้านบนก่อน..."
+                            class="flex-1 px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs font-mono text-gray-600 outline-none">
+                        <button onclick="copyMagicShareLink()" class="px-3 py-1.5 bg-white hover:bg-blue-100 text-blue-700 border border-blue-300 rounded-lg text-xs font-semibold transition">
+                            คัดลอกลิงก์
+                        </button>
+                    </div>
+                </div>
+
                 <div id="liffStatusBox" class="hidden p-3 rounded-xl text-xs font-medium"></div>
             </div>
             <div class="px-5 py-3.5 bg-gray-50 border-t border-gray-100 flex justify-end space-x-2">
@@ -358,6 +376,24 @@
         <div class="bg-gray-900 text-white px-4 py-3 rounded-xl shadow-lg flex items-center space-x-3 text-sm font-medium">
             <i id="toastIcon" class="fa-solid fa-circle-check text-[#06C755] text-lg"></i>
             <span id="toastMessage">บันทึกข้อมูลเรียบร้อยแล้ว</span>
+        </div>
+    </div>
+
+    <!-- หน้าจอพิเศษสำหรับโหมดแชร์อัตโนมัติ (ซ่อนหน้าสร้างการ์ดทั้งหมดเมื่อเพื่อนกดปุ่มแชร์) -->
+    <div id="autoShareOverlay" class="fixed inset-0 bg-gray-900/95 backdrop-blur-md z-[100] hidden flex-col items-center justify-center p-6 text-center text-white">
+        <div class="w-16 h-16 bg-[#06C755] rounded-2xl flex items-center justify-center text-white shadow-lg mb-4 animate-bounce">
+            <i class="fa-brands fa-line text-4xl"></i>
+        </div>
+        <h2 id="autoShareTitle" class="text-xl font-bold mb-2">กำลังเปิดหน้าต่างแชร์เข้า LINE...</h2>
+        <p id="autoShareDesc" class="text-sm text-gray-300 max-w-sm mb-6">กรุณารอสักครู่ ระบบกำลังเตรียมการ์ดเพื่อส่งต่อให้เพื่อนหรือกลุ่มของคุณ</p>
+        <div class="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+            <button id="btnRetryAutoShare" onclick="executeAutoShareMode()" class="w-full py-3 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl font-bold text-sm shadow-lg transition flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-paper-plane"></i>
+                <span>เลือกเพื่อน / กลุ่มเพื่อแชร์</span>
+            </button>
+            <button onclick="exitAutoShareMode()" class="w-full py-2.5 bg-white/10 hover:bg-white/20 text-gray-300 rounded-xl font-medium text-xs transition">
+                กลับไปหน้าแก้ไขการ์ด
+            </button>
         </div>
     </div>
 
@@ -388,9 +424,48 @@
         let appState = JSON.parse(JSON.stringify(defaultState));
         const STORAGE_KEY = 'line_flex_builder_projects_v1';
         const LIFF_ID_KEY = 'line_flex_builder_liff_id';
+        let autoSharePayload = null; // เก็บข้อมูลการ์ดที่ถอดรหัสจากลิงก์แชร์
+
+        // เข้ารหัสข้อมูลเป็น Base64 รองรับภาษาไทย
+        function encodeShareData(obj) {
+            const jsonStr = JSON.stringify(obj);
+            return btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode('0x' + p1)));
+        }
+
+        // ถอดรหัสข้อมูลจาก Base64
+        function decodeShareData(str) {
+            const jsonStr = decodeURIComponent(Array.prototype.map.call(atob(str), (c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+            return JSON.parse(jsonStr);
+        }
 
         // เริ่มต้นทำงานเมื่อโหลดหน้าเว็บ
         window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            // รองรับทั้งพารามิเตอร์ปกติ และ liff.state กรณีเปิดผ่านลิงก์ https://liff.line.me/...
+            let shareParam = urlParams.get('share');
+            let liffIdParam = urlParams.get('liffId');
+            
+            const liffState = urlParams.get('liff.state');
+            if (liffState) {
+                const stateParams = new URLSearchParams(liffState.startsWith('?') ? liffState : '?' + liffState);
+                if (!shareParam) shareParam = stateParams.get('share');
+                if (!liffIdParam) liffIdParam = stateParams.get('liffId');
+            }
+
+            // หากเปิดจากปุ่ม "แชร์ให้เพื่อน" ให้เข้าสู่โหมดแชร์ทันที (ซ่อนหน้าสร้างการ์ด)
+            if (shareParam) {
+                try {
+                    autoSharePayload = decodeShareData(shareParam);
+                    if (liffIdParam) autoSharePayload.liffId = liffIdParam;
+                    document.getElementById('autoShareOverlay').classList.remove('hidden');
+                    document.getElementById('autoShareOverlay').classList.add('flex');
+                    executeAutoShareMode();
+                    return; // หยุดการโหลดหน้าแก้ไขปกติ
+                } catch (e) {
+                    console.error('ถอดรหัสลิงก์แชร์ไม่สำเร็จ:', e);
+                }
+            }
+
             loadAutoDraft();
             renderFormInputs();
             updatePreview();
@@ -403,11 +478,130 @@
             }
         };
 
+        // ทำงานในโหมดแชร์อัตโนมัติ (เมื่อเพื่อนกดปุ่มแชร์ในแชต LINE)
+        async function executeAutoShareMode() {
+            if (!autoSharePayload || !autoSharePayload.liffId) {
+                document.getElementById('autoShareTitle').textContent = 'ไม่พบข้อมูล LIFF ID ในลิงก์';
+                document.getElementById('autoShareDesc').textContent = 'กรุณาสร้างลิงก์แชร์ใหม่อีกครั้งจากหน้าตั้งค่า';
+                return;
+            }
+
+            const titleEl = document.getElementById('autoShareTitle');
+            const descEl = document.getElementById('autoShareDesc');
+            const btnRetry = document.getElementById('btnRetryAutoShare');
+
+            try {
+                btnRetry.disabled = true;
+                titleEl.textContent = 'กำลังเชื่อมต่อ LINE...';
+                descEl.textContent = 'กรุณารอสักครู่ ระบบกำลังเปิดหน้าต่างเลือกเพื่อนหรือกลุ่มไลน์';
+
+                await liff.init({ liffId: autoSharePayload.liffId });
+
+                if (!liff.isLoggedIn()) {
+                    liff.login({ redirectUri: window.location.href });
+                    return;
+                }
+
+                if (!liff.isApiAvailable('shareTargetPicker')) {
+                    throw new Error('กรุณาเปิดใช้งาน Share Target Picker ใน LINE Developers Console');
+                }
+
+                const messages = [{
+                    type: 'flex',
+                    altText: (autoSharePayload.altText || 'ส่งการ์ดประชาสัมพันธ์ถึงคุณ').substring(0, 400),
+                    contents: autoSharePayload.bubble
+                }];
+
+                const res = await liff.shareTargetPicker(messages);
+                if (res) {
+                    titleEl.textContent = '✅ แชร์การ์ดเรียบร้อยแล้ว!';
+                    descEl.textContent = 'คุณสามารถปิดหน้าต่างนี้เพื่อกลับสู่แชต LINE ได้ทันที';
+                    if (liff.isInClient()) {
+                        setTimeout(() => liff.closeWindow(), 1200);
+                    }
+                } else {
+                    titleEl.textContent = 'ยกเลิกการแชร์';
+                    descEl.textContent = 'กดปุ่มสีเขียวด้านล่างหากต้องการเลือกเพื่อนเพื่อแชร์อีกครั้ง';
+                }
+            } catch (err) {
+                titleEl.textContent = '❌ ไม่สามารถเปิดหน้าแชร์ได้';
+                descEl.textContent = err.message || 'กรุณาตรวจสอบการตั้งค่า LIFF Endpoint URL';
+            } finally {
+                btnRetry.disabled = false;
+            }
+        }
+
+        // ออกจากโหมดแชร์อัตโนมัติเพื่อกลับมาแก้ไขการ์ด
+        function exitAutoShareMode() {
+            document.getElementById('autoShareOverlay').classList.add('hidden');
+            document.getElementById('autoShareOverlay').classList.remove('flex');
+            window.history.replaceState({}, document.title, window.location.pathname);
+            loadAutoDraft();
+            renderFormInputs();
+            updatePreview();
+            updateSavedBadge();
+        }
+
+        // สร้างลิงก์แชร์อัตโนมัติ (Magic Share Link)
+        function generateMagicShareUrl() {
+            const liffId = document.getElementById('liffIdInput').value.trim();
+            if (!liffId) return '';
+            const altText = document.getElementById('altTextInput').value.trim() || appState.cardTitle || 'ส่งการ์ดประชาสัมพันธ์';
+            const payload = {
+                liffId: liffId,
+                altText: altText,
+                bubble: generateLineFlexJson()
+            };
+            const encoded = encodeShareData(payload);
+            return `https://liff.line.me/${liffId}?share=${encodeURIComponent(encoded)}`;
+        }
+
+        // อัปเดตช่องแสดงลิงก์แชร์อัตโนมัติ
+        function refreshMagicShareUrlBox() {
+            const url = generateMagicShareUrl();
+            document.getElementById('magicShareUrlOutput').value = url;
+        }
+
+        // คัดลอกลิงก์แชร์อัตโนมัติ
+        function copyMagicShareLink() {
+            const input = document.getElementById('magicShareUrlOutput');
+            if (!input.value) {
+                showToast('กรุณากรอก LIFF ID ก่อนคัดลอกลิงก์', true);
+                return;
+            }
+            input.select();
+            input.setSelectionRange(0, 99999);
+            document.execCommand('copy');
+            showToast('คัดลอกลิงก์แชร์อัตโนมัติเรียบร้อยแล้ว!');
+        }
+
+        // นำลิงก์แชร์อัตโนมัติไปใส่ในปุ่ม "แชร์การ์ดนี้ให้เพื่อน" ของการ์ดทันที
+        function applyMagicShareLinkToButton() {
+            const url = generateMagicShareUrl();
+            if (!url) {
+                showToast('กรุณากรอก LIFF ID ด้านบนก่อน', true);
+                return;
+            }
+            // ค้นหาปุ่มที่มีคำว่า "แชร์" หรือปุ่มสุดท้าย
+            let targetBtn = appState.buttons.find(b => b.label.includes('แชร์'));
+            if (!targetBtn && appState.buttons.length > 0) {
+                targetBtn = appState.buttons[appState.buttons.length - 1];
+            }
+            if (targetBtn) {
+                targetBtn.uri = url;
+                renderFormInputs();
+                updatePreview();
+                refreshMagicShareUrlBox();
+                showToast(`อัปเดตลิงก์ลงในปุ่ม "${targetBtn.label}" เรียบร้อยแล้ว!`);
+            }
+        }
+
         // เปิดหน้าต่างตั้งค่าและแชร์เข้า LINE
         function openShareLineModal() {
             const statusBox = document.getElementById('liffStatusBox');
             statusBox.classList.add('hidden');
             document.getElementById('altTextInput').value = appState.cardTitle || 'ส่งการ์ดประชาสัมพันธ์ถึงคุณ';
+            refreshMagicShareUrlBox();
             document.getElementById('shareLineModal').classList.remove('hidden');
             document.getElementById('shareLineModal').classList.add('flex');
         }
@@ -420,6 +614,7 @@
                 return;
             }
             localStorage.setItem(LIFF_ID_KEY, liffId);
+            refreshMagicShareUrlBox();
             showToast('บันทึก LIFF ID เรียบร้อยแล้ว');
         }
 
@@ -458,7 +653,7 @@
 
                 // 3. ตรวจสอบว่าเปิดใช้งาน Share Target Picker ใน Console หรือยัง
                 if (!liff.isApiAvailable('shareTargetPicker')) {
-                    throw new Error('ไม่พบสิทธิ์ใช้งาน Share Target Picker กรุณาเปิดฟีเจอร์นี้ใน LINE Developers Console');
+                    throw new Error('ไม่พบสิทธิ์ใช้งาน Share Target Picker: กรุณาไปที่ LINE Developers Console > แท็บ LIFF > เปิด "Share target picker" เป็น Enabled และเช็ก Scopes (chat_message.write)');
                 }
 
                 // 4. เตรียมโครงสร้างข้อความ Flex Message
