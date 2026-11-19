@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LINE Flex Message Builder - เครื่องมือสร้างการ์ด LINE</title>
+    <!-- โหลด Tailwind CSS สำหรับตกแต่งหน้าเว็บ -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- โหลด Font Awesome สำหรับไอคอน -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- โหลด LINE LIFF SDK สำหรับฟีเจอร์ Share Target Picker -->
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <!-- โหลดฟอนต์ภาษาไทย Sarabun และ Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Sarabun', 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* สไตล์จำลองหน้าจอแชต LINE */
+        .line-chat-bg {
+            background-color: #8cabd9;
+            background-image: radial-gradient(#7a9bc9 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        /* สไตล์ Scrollbar ที่สวยงาม */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="text-gray-800 min-h-screen flex flex-col">
+
+    <!-- แถบเมนูด้านบน (Navbar) -->
+    <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-[#06C755] rounded-xl flex items-center justify-center text-white shadow-sm">
+                    <i class="fa-brands fa-line text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold text-gray-900 leading-tight">Flex Message Builder</h1>
+                    <p class="text-xs text-gray-500 hidden sm:block">ออกแบบการ์ด LINE พร้อมปุ่มลิงก์และบันทึกแก้ไขได้</p>
+                </div>
+            </div>
+
+            <!-- ปุ่มจัดการโปรเจกต์ (บันทึก / โหลด / รีเซ็ต) -->
+            <div class="flex items-center space-x-2">
+                <button onclick="openSavedModal()" class="px-3 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-sm font-medium transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-folder-open"></i>
+                    <span class="hidden sm:inline">โปรเจกต์ที่บันทึก</span>
+                    <span id="savedCountBadge" class="bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full">0</span>
+                </button>
+                <button onclick="openImportModal()" class="px-3 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg text-sm font-medium transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-file-import"></i>
+                    <span class="hidden sm:inline">นำเข้า JSON</span>
+                </button>
+                <button onclick="saveCurrentProject()" class="px-3 py-2 bg-[#06C755] text-white hover:bg-[#05b34c] rounded-lg text-sm font-medium shadow-sm transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                    <span>บันทึกไว้แก้ไข</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- พื้นที่ทำงานหลัก (แบ่ง 2 ฝั่ง: ฟอร์มตั้งค่า และ หน้าจอพรีวิว) -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- ฝั่งซ้าย: แผงควบคุมและแก้ไขข้อมูล (7 คอลัมน์) -->
+        <div class="lg:col-span-7 space-y-5">
+            
+            <!-- กล่องตั้งค่าชื่อโปรเจกต์ -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="flex-1">
+                        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">ชื่อการ์ด / ชื่อโปรเจกต์ (สำหรับจำเวลาแก้ไข)</label>
+                        <input type="text" id="projectName" value="การ์ดรับสมัครสมาชิกใหม่" oninput="updatePreview()" 
+                            class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#06C755] focus:border-[#06C755] outline-none font-medium text-gray-800">
+                    </div>
+                    <div class="pt-4 sm:pt-5">
+                        <button onclick="resetToDefault()" class="w-full sm:w-auto px-3.5 py-2 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl border border-gray-200 transition">
+                            <i class="fa-solid fa-rotate-left mr-1"></i> คืนค่าเริ่มต้น
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 1. ตั้งค่ารูปภาพแบนเนอร์ (Hero Image) -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+                <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-7 h-7 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-sm">1</span>
+                        <h2 class="font-bold text-gray-800">รูปภาพปก (Hero Image)</h2>
+                    </div>
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="showHero" checked onchange="updatePreview()" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#06C755] relative"></div>
+                        <span class="ml-2 text-sm font-medium text-gray-600">แสดงรูปภาพ</span>
+                    </label>
+                </div>
+
+                <div id="heroSettings" class="space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ลิงก์รูปภาพ (Image URL - ต้องขึ้นต้นด้วย https://)</label>
+                        <input type="url" id="heroUrl" value="https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=800&q=80" oninput="updatePreview()"
+                            placeholder="https://example.com/banner.jpg"
+                            class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#06C755] focus:border-[#06C755] outline-none text-sm">
+                        <p class="text-xs text-gray-400 mt-1">* LINE รองรับเฉพาะลิงก์รูปภาพ HTTPS ที่เข้าถึงได้แบบสาธารณะเท่านั้น</p>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">สัดส่วนรูปภาพ (Aspect Ratio)</label>
+                            <select id="heroRatio" onchange="updatePreview()" class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#06C755] outline-none text-sm bg-white">
+                                <option value="20:13">20:13 (มาตรฐานแบนเนอร์)</option>
+                                <option value="16:9">16:9 (แนวนอนกว้าง)</option>
+                                <option value="1:1">1:1 (สี่เหลี่ยมจัตุรัส)</option>
+                                <option value="4:3">4:3 (แนวนอนทั่วไป)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">ลิงก์เมื่อกดที่รูปภาพ (ไม่บังคับ)</label>
+                            <input type="url" id="heroActionUrl" placeholder="https://..." oninput="updatePreview()"
+                                class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#06C755] outline-none text-sm">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. ตั้งค่าข้อความเนื้อหา (Body Content) -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+                <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center font-bold text-sm">2</span>
+                        <h2 class="font-bold text-gray-800">ข้อความในการ์ด (Body)</h2>
+                    </div>
+                    <button onclick="addTextBlock()" class="px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-semibold transition flex items-center space-x-1">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>เพิ่มบรรทัดข้อความ</span>
+                    </button>
+                </div>
+
+                <!-- หัวข้อหลัก (Title) -->
+                <div class="bg-gray-50 p-3.5 rounded-xl border border-gray-200 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-gray-500 uppercase">หัวข้อหลัก (Title)</span>
+                        <div class="flex items-center space-x-2">
+                            <input type="color" id="titleColor" value="#111827" oninput="updatePreview()" class="w-6 h-6 rounded cursor-pointer border-0 bg-transparent" title="เลือกสีหัวข้อ">
+                            <select id="titleSize" onchange="updatePreview()" class="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white">
+                                <option value="lg">ขนาดกลาง (LG)</option>
+                                <option value="xl" selected>ขนาดใหญ่ (XL)</option>
+                                <option value="xxl">ใหญ่มาก (XXL)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <input type="text" id="cardTitle" value="เปิดรับสมัครเข้าร่วมโครงการรุ่นที่ 1" oninput="updatePreview()"
+                        placeholder="ใส่หัวข้อหลักของการ์ด..."
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#06C755] outline-none font-bold text-gray-800 bg-white">
+                </div>
+
+                <!-- รายการข้อความเพิ่มเติม (Dynamic Text Blocks) -->
+                <div id="textBlocksContainer" class="space-y-3">
+                    <!-- จะถูกสร้างด้วย JavaScript -->
+                </div>
+            </div>
+
+            <!-- 3. ตั้งค่าปุ่มกดและลิงก์ (Footer Buttons) -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+                <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-sm">3</span>
+                        <h2 class="font-bold text-gray-800">ปุ่มกดและลิงก์ (Buttons)</h2>
+                    </div>
+                    <button onclick="addButtonBlock()" class="px-3 py-1.5 bg-[#06C755]/10 text-[#06C755] hover:bg-[#06C755]/20 rounded-lg text-xs font-semibold transition flex items-center space-x-1">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>เพิ่มปุ่มลิงก์</span>
+                    </button>
+                </div>
+
+                <p class="text-xs text-gray-500">คุณสามารถเพิ่มปุ่มได้ตามต้องการ เช่น ปุ่มกรอกฟอร์มสมัคร, ปุ่มดูรายชื่อผู้สมัคร และปุ่มแชร์ให้เพื่อน</p>
+
+                <!-- รายการปุ่มกด (Dynamic Buttons) -->
+                <div id="buttonsContainer" class="space-y-3">
+                    <!-- จะถูกสร้างด้วย JavaScript -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ฝั่งขวา: หน้าจอพรีวิวการ์ด LINE และ โค้ด JSON (5 คอลัมน์) -->
+        <div class="lg:col-span-5 space-y-5">
+            <div class="sticky top-22 space-y-5">
+                
+                <!-- กล่องแสดงตัวอย่างการ์ดบนหน้าจอแชต LINE -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="bg-gray-800 text-white px-4 py-3 flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <i class="fa-solid fa-mobile-screen-button text-[#06C755]"></i>
+                            <span class="font-semibold text-sm">ตัวอย่างการแสดงผลใน LINE</span>
+                        </div>
+                        <button onclick="openShareLineModal()" class="bg-[#06C755] hover:bg-[#05b34c] text-white px-3 py-1 rounded-lg text-xs font-bold shadow-sm transition flex items-center space-x-1.5">
+                            <i class="fa-brands fa-line text-sm"></i>
+                            <span>แชร์เข้า LINE</span>
+                        </button>
+                    </div>
+                    
+                    <!-- พื้นหลังแชต LINE -->
+                    <div class="line-chat-bg p-5 sm:p-6 flex justify-center items-start min-h-[420px] max-h-[600px] overflow-y-auto">
+                        <!-- ตัวการ์ด Flex Message (Bubble) -->
+                        <div id="flexPreviewCard" class="w-full max-w-[300px] bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 transition-all">
+                            <!-- รูปภาพ Hero -->
+                            <div id="previewHeroWrapper" class="w-full bg-gray-100 overflow-hidden relative">
+                                <img id="previewHeroImg" src="" alt="Banner" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/600x390/e2e8f0/64748b?text=Image+Preview'">
+                            </div>
+                            
+                            <!-- เนื้อหา Body -->
+                            <div class="p-4 space-y-2">
+                                <h3 id="previewTitle" class="font-bold text-gray-900 leading-snug break-words"></h3>
+                                <div id="previewBodyTexts" class="space-y-1.5"></div>
+                            </div>
+
+                            <!-- ปุ่ม Footer -->
+                            <div id="previewFooter" class="px-4 pb-4 pt-1 space-y-2">
+                                <!-- ปุ่มจะถูกเรนเดอร์ที่นี่ -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- กล่องแสดงโค้ด JSON สำหรับนำไปใช้งาน -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <i class="fa-solid fa-code text-gray-600"></i>
+                            <span class="font-bold text-sm text-gray-800">โค้ด Flex Message JSON</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="copyJsonCode()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-900 text-white rounded-lg text-xs font-medium transition flex items-center space-x-1.5 shadow-sm">
+                                <i class="fa-regular fa-copy"></i>
+                                <span>คัดลอก JSON</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-3 bg-gray-900">
+                        <textarea id="jsonOutput" readonly rows="8" 
+                            class="w-full bg-transparent text-emerald-400 font-mono text-xs focus:outline-none resize-none"></textarea>
+                    </div>
+                    <div class="px-4 py-2.5 bg-blue-50 text-blue-800 text-xs flex items-start space-x-2">
+                        <i class="fa-solid fa-circle-info mt-0.5 text-blue-600"></i>
+                        <span>นำโค้ด JSON นี้ไปวางใน <b>LINE Official Account Manager</b> (เมนูข้อความตอบกลับอัตโนมัติ > Flex Message) หรือใช้ใน <b>LINE Flex Simulator</b> ได้ทันที</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal: รายการโปรเจกต์ที่บันทึกไว้ (สำหรับกลับมาแก้ไข) -->
+    <div id="savedModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-xl overflow-hidden animate-fade-in">
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 class="font-bold text-lg text-gray-800"><i class="fa-solid fa-folder-open text-blue-600 mr-2"></i>โปรเจกต์ที่บันทึกไว้</h3>
+                <button onclick="closeModal('savedModal')" class="text-gray-400 hover:text-gray-600 w-8 h-8 rounded-full flex items-center justify-center">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div id="savedListContainer" class="p-5 max-h-[60vh] overflow-y-auto space-y-3">
+                <!-- รายการโปรเจกต์จะแสดงที่นี่ -->
+            </div>
+            <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+                <button onclick="closeModal('savedModal')" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm font-medium transition">ปิดหน้าต่าง</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: นำเข้าโค้ด JSON เดิมกลับมาแก้ไข -->
+    <div id="importModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-xl overflow-hidden">
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 class="font-bold text-lg text-gray-800"><i class="fa-solid fa-file-import text-[#06C755] mr-2"></i>นำเข้าโค้ด JSON กลับมาแก้ไข</h3>
+                <button onclick="closeModal('importModal')" class="text-gray-400 hover:text-gray-600 w-8 h-8 rounded-full flex items-center justify-center">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-5 space-y-3">
+                <p class="text-sm text-gray-600">วางโค้ด Flex Message JSON (รูปแบบ Bubble) ที่คุณเคยสร้างไว้ เพื่อดึงข้อมูลกลับมาแก้ไขในฟอร์ม:</p>
+                <textarea id="importJsonInput" rows="8" placeholder='{"type": "bubble", "hero": {...}, "body": {...}, "footer": {...}}'
+                    class="w-full p-3 border border-gray-300 rounded-xl font-mono text-xs focus:ring-2 focus:ring-[#06C755] outline-none"></textarea>
+            </div>
+            <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-end space-x-2">
+                <button onclick="closeModal('importModal')" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm font-medium transition">ยกเลิก</button>
+                <button onclick="processImportJson()" class="px-4 py-2 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl text-sm font-medium transition">โหลดข้อมูลเข้าตัวแก้ไข</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: ตั้งค่า LIFF ID และแชร์การ์ดเข้า LINE ทันที -->
+    <div id="shareLineModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-xl overflow-hidden">
+            <div class="px-5 py-4 bg-[#06C755] text-white flex items-center justify-between">
+                <h3 class="font-bold text-lg flex items-center space-x-2">
+                    <i class="fa-brands fa-line text-2xl"></i>
+                    <span>แชร์การ์ดเข้า LINE (Share Target Picker)</span>
+                </h3>
+                <button onclick="closeModal('shareLineModal')" class="text-white/80 hover:text-white w-8 h-8 rounded-full flex items-center justify-center">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 space-y-1">
+                    <p class="font-bold"><i class="fa-solid fa-triangle-exclamation mr-1"></i> ข้อกำหนดก่อนกดแชร์เข้า LINE:</p>
+                    <p>1. ต้องนำไฟล์เว็บนี้ขึ้นโฮสติ้ง HTTPS (เช่น GitHub Pages, Vercel, Netlify) และนำไปตั้งค่าเป็น <b>Endpoint URL</b> ใน LINE Developers Console</p>
+                    <p>2. ต้องเปิดใช้งาน <b>Share Target Picker</b> ในตั้งค่า LINE Login / LIFF App ของคุณ</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">ระบุ LIFF ID ของคุณ</label>
+                    <div class="flex space-x-2">
+                        <input type="text" id="liffIdInput" placeholder="เช่น 2001234567-AbCdEfGh"
+                            class="flex-1 px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#06C755] outline-none text-sm font-mono">
+                        <button onclick="saveLiffId()" class="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold transition">
+                            จำค่านี้ไว้
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">ข้อความแจ้งเตือน (Alt Text - แสดงก่อนเปิดอ่าน)</label>
+                    <input type="text" id="altTextInput" value="ส่งการ์ดประชาสัมพันธ์ถึงคุณ"
+                        class="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#06C755] outline-none text-sm">
+                </div>
+
+                <div id="liffStatusBox" class="hidden p-3 rounded-xl text-xs font-medium"></div>
+            </div>
+            <div class="px-5 py-3.5 bg-gray-50 border-t border-gray-100 flex justify-end space-x-2">
+                <button onclick="closeModal('shareLineModal')" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm font-medium transition">ปิด</button>
+                <button id="btnTriggerShare" onclick="shareFlexToLine()" class="px-5 py-2 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl text-sm font-bold shadow-sm transition flex items-center space-x-2">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span>เลือกเพื่อน / กลุ่มเพื่อแชร์</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- กล่องแจ้งเตือน (Toast Notification แทน alert()) -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+        <div class="bg-gray-900 text-white px-4 py-3 rounded-xl shadow-lg flex items-center space-x-3 text-sm font-medium">
+            <i id="toastIcon" class="fa-solid fa-circle-check text-[#06C755] text-lg"></i>
+            <span id="toastMessage">บันทึกข้อมูลเรียบร้อยแล้ว</span>
+        </div>
+    </div>
+
+    <script>
+        // ข้อมูลเริ่มต้นของระบบ (Template สำหรับการ์ดรับสมัคร 3 ปุ่ม)
+        const defaultState = {
+            id: null,
+            projectName: "การ์ดรับสมัครสมาชิกใหม่",
+            showHero: true,
+            heroUrl: "https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=800&q=80",
+            heroRatio: "20:13",
+            heroActionUrl: "",
+            cardTitle: "เปิดรับสมัครเข้าร่วมโครงการรุ่นที่ 1",
+            titleColor: "#111827",
+            titleSize: "xl",
+            texts: [
+                { id: 1, text: "กรอกข้อมูลเพื่อลงทะเบียนเข้าร่วมกิจกรรมฟรี! รับจำนวนจำกัด", color: "#4b5563", size: "sm", weight: "regular" },
+                { id: 2, text: "📅 ปิดรับสมัคร: 30 พฤศจิกายน นี้", color: "#06C755", size: "xs", weight: "bold" }
+            ],
+            buttons: [
+                { id: 101, label: "📝 กรอกข้อมูลสมัคร", uri: "https://forms.google.com/", style: "primary", color: "#06C755" },
+                { id: 102, label: "📋 ดูรายชื่อผู้สมัครทั้งหมด", uri: "https://docs.google.com/spreadsheets/", style: "secondary", color: "#e5e7eb" },
+                { id: 103, label: "📤 แชร์การ์ดนี้ให้เพื่อน", uri: "https://liff.line.me/", style: "link", color: "#2563eb" }
+            ]
+        };
+
+        // สถานะปัจจุบันของแอปพลิเคชัน
+        let appState = JSON.parse(JSON.stringify(defaultState));
+        const STORAGE_KEY = 'line_flex_builder_projects_v1';
+        const LIFF_ID_KEY = 'line_flex_builder_liff_id';
+
+        // เริ่มต้นทำงานเมื่อโหลดหน้าเว็บ
+        window.onload = function() {
+            loadAutoDraft();
+            renderFormInputs();
+            updatePreview();
+            updateSavedBadge();
+            
+            // โหลด LIFF ID ที่เคยบันทึกไว้
+            const savedLiffId = localStorage.getItem(LIFF_ID_KEY);
+            if (savedLiffId) {
+                document.getElementById('liffIdInput').value = savedLiffId;
+            }
+        };
+
+        // เปิดหน้าต่างตั้งค่าและแชร์เข้า LINE
+        function openShareLineModal() {
+            const statusBox = document.getElementById('liffStatusBox');
+            statusBox.classList.add('hidden');
+            document.getElementById('altTextInput').value = appState.cardTitle || 'ส่งการ์ดประชาสัมพันธ์ถึงคุณ';
+            document.getElementById('shareLineModal').classList.remove('hidden');
+            document.getElementById('shareLineModal').classList.add('flex');
+        }
+
+        // บันทึก LIFF ID ลงเครื่อง
+        function saveLiffId() {
+            const liffId = document.getElementById('liffIdInput').value.trim();
+            if (!liffId) {
+                showToast('กรุณากรอก LIFF ID ก่อนบันทึก', true);
+                return;
+            }
+            localStorage.setItem(LIFF_ID_KEY, liffId);
+            showToast('บันทึก LIFF ID เรียบร้อยแล้ว');
+        }
+
+        // ฟังก์ชันหลักสำหรับเชื่อมต่อ LIFF และเปิดหน้าต่างเลือกเพื่อนแชร์ (Share Target Picker)
+        async function shareFlexToLine() {
+            const liffId = document.getElementById('liffIdInput').value.trim();
+            const altText = document.getElementById('altTextInput').value.trim() || 'ส่งการ์ดประชาสัมพันธ์';
+            const statusBox = document.getElementById('liffStatusBox');
+            const btnShare = document.getElementById('btnTriggerShare');
+
+            if (!liffId) {
+                statusBox.textContent = '⚠️ กรุณากรอก LIFF ID ของคุณก่อนกดแชร์';
+                statusBox.className = 'p-3 rounded-xl text-xs font-medium bg-red-50 text-red-700 border border-red-200 block';
+                return;
+            }
+
+            // บันทึก LIFF ID ให้อัตโนมัติ
+            localStorage.setItem(LIFF_ID_KEY, liffId);
+
+            try {
+                btnShare.disabled = true;
+                btnShare.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>กำลังเชื่อมต่อ LINE...</span>';
+                
+                statusBox.textContent = 'กำลังเริ่มต้นระบบ LINE LIFF...';
+                statusBox.className = 'p-3 rounded-xl text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 block';
+
+                // 1. เริ่มต้นการทำงานของ LIFF
+                await liff.init({ liffId: liffId });
+
+                // 2. ตรวจสอบการล็อกอิน LINE (หากเปิดบนเบราว์เซอร์ปกติจะให้ล็อกอินก่อน)
+                if (!liff.isLoggedIn()) {
+                    statusBox.textContent = 'กำลังพาท่านไปหน้าเข้าสู่ระบบ LINE...';
+                    liff.login({ redirectUri: window.location.href });
+                    return;
+                }
+
+                // 3. ตรวจสอบว่าเปิดใช้งาน Share Target Picker ใน Console หรือยัง
+                if (!liff.isApiAvailable('shareTargetPicker')) {
+                    throw new Error('ไม่พบสิทธิ์ใช้งาน Share Target Picker กรุณาเปิดฟีเจอร์นี้ใน LINE Developers Console');
+                }
+
+                // 4. เตรียมโครงสร้างข้อความ Flex Message
+                const flexBubble = generateLineFlexJson();
+                const messages = [
+                    {
+                        type: 'flex',
+                        altText: altText.substring(0, 400),
+                        contents: flexBubble
+                    }
+                ];
+
+                // 5. เปิดหน้าต่างเลือกเพื่อนหรือกลุ่มใน LINE
+                const res = await liff.shareTargetPicker(messages);
+                if (res) {
+                    statusBox.textContent = '✅ แชร์การ์ดเข้า LINE เรียบร้อยแล้ว!';
+                    statusBox.className = 'p-3 rounded-xl text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 block';
+                    showToast('ส่งการ์ดเข้า LINE สำเร็จ!');
+                } else {
+                    statusBox.textContent = 'ยกเลิกการเลือกผู้รับ';
+                    statusBox.className = 'p-3 rounded-xl text-xs font-medium bg-gray-100 text-gray-600 block';
+                }
+
+            } catch (error) {
+                console.error('LIFF Share Error:', error);
+                statusBox.innerHTML = `❌ เกิดข้อผิดพลาด: ${error.message || error}<br><span class="text-[11px] opacity-80">* ตรวจสอบว่า URL ของหน้าเว็บนี้ตรงกับ Endpoint URL ที่ตั้งไว้ใน LINE Developers Console</span>`;
+                statusBox.className = 'p-3 rounded-xl text-xs font-medium bg-red-50 text-red-700 border border-red-200 block';
+            } finally {
+                btnShare.disabled = false;
+                btnShare.innerHTML = '<i class="fa-solid fa-paper-plane"></i><span>เลือกเพื่อน / กลุ่มเพื่อแชร์</span>';
+            }
+        }
+
+        // แสดงข้อความแจ้งเตือน (Toast) แทนการใช้ alert()
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMessage');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastMsg.textContent = message;
+            if (isError) {
+                toastIcon.className = "fa-solid fa-circle-exclamation text-red-400 text-lg";
+            } else {
+                toastIcon.className = "fa-solid fa-circle-check text-[#06C755] text-lg";
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        // สร้างช่องกรอกข้อความและปุ่มในฝั่งซ้ายตามข้อมูลใน appState
+        function renderFormInputs() {
+            document.getElementById('projectName').value = appState.projectName;
+            document.getElementById('showHero').checked = appState.showHero;
+            document.getElementById('heroUrl').value = appState.heroUrl;
+            document.getElementById('heroRatio').value = appState.heroRatio;
+            document.getElementById('heroActionUrl').value = appState.heroActionUrl || "";
+            document.getElementById('cardTitle').value = appState.cardTitle;
+            document.getElementById('titleColor').value = appState.titleColor;
+            document.getElementById('titleSize').value = appState.titleSize;
+
+            // 1. เรนเดอร์รายการข้อความเพิ่มเติม
+            const textContainer = document.getElementById('textBlocksContainer');
+            textContainer.innerHTML = '';
+            appState.texts.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-2 relative group';
+                div.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold text-gray-500">ข้อความบรรทัดที่ ${index + 1}</span>
+                        <div class="flex items-center space-x-2">
+                            <input type="color" value="${item.color}" onchange="updateTextItem(${item.id}, 'color', this.value)" class="w-5 h-5 rounded cursor-pointer border-0 bg-transparent" title="สีข้อความ">
+                            <select onchange="updateTextItem(${item.id}, 'size', this.value)" class="text-xs border border-gray-300 rounded px-1.5 py-0.5 bg-white">
+                                <option value="xs" ${item.size === 'xs' ? 'selected' : ''}>เล็ก (XS)</option>
+                                <option value="sm" ${item.size === 'sm' ? 'selected' : ''}>ปกติ (SM)</option>
+                                <option value="md" ${item.size === 'md' ? 'selected' : ''}>กลาง (MD)</option>
+                                <option value="lg" ${item.size === 'lg' ? 'selected' : ''}>ใหญ่ (LG)</option>
+                            </select>
+                            <select onchange="updateTextItem(${item.id}, 'weight', this.value)" class="text-xs border border-gray-300 rounded px-1.5 py-0.5 bg-white">
+                                <option value="regular" ${item.weight === 'regular' ? 'selected' : ''}>ตัวปกติ</option>
+                                <option value="bold" ${item.weight === 'bold' ? 'selected' : ''}>ตัวหนา</option>
+                            </select>
+                            <button onclick="removeTextBlock(${item.id})" class="text-gray-400 hover:text-red-500 px-1" title="ลบบรรทัดนี้">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <textarea rows="2" oninput="updateTextItem(${item.id}, 'text', this.value)" placeholder="พิมพ์ข้อความรายละเอียด..."
+                        class="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#06C755] outline-none text-sm bg-white">${item.text}</textarea>
+                `;
+                textContainer.appendChild(div);
+            });
+
+            // 2. เรนเดอร์รายการปุ่มกด
+            const btnContainer = document.getElementById('buttonsContainer');
+            btnContainer.innerHTML = '';
+            appState.buttons.forEach((btn, index) => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-50 p-3.5 rounded-xl border border-gray-200 space-y-2.5';
+                div.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">ปุ่มที่ ${index + 1}</span>
+                        <div class="flex items-center space-x-2">
+                            <select onchange="updateButtonItem(${btn.id}, 'style', this.value)" class="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white">
+                                <option value="primary" ${btn.style === 'primary' ? 'selected' : ''}>ปุ่มทึบ (Primary)</option>
+                                <option value="secondary" ${btn.style === 'secondary' ? 'selected' : ''}>ปุ่มสีอ่อน (Secondary)</option>
+                                <option value="link" ${btn.style === 'link' ? 'selected' : ''}>ปุ่มข้อความ (Link)</option>
+                            </select>
+                            <div class="flex items-center space-x-1" title="เลือกสีปุ่ม">
+                                <span class="text-xs text-gray-500">สี:</span>
+                                <input type="color" value="${btn.color}" onchange="updateButtonItem(${btn.id}, 'color', this.value)" class="w-6 h-6 rounded cursor-pointer border-0 bg-transparent">
+                            </div>
+                            <button onclick="removeButtonBlock(${btn.id})" class="text-gray-400 hover:text-red-500 p-1" title="ลบปุ่มนี้">
+                                <i class="fa-solid fa-trash-can text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-0.5">ข้อความบนปุ่ม</label>
+                            <input type="text" value="${btn.label}" oninput="updateButtonItem(${btn.id}, 'label', this.value)" placeholder="เช่น สมัครเลย"
+                                class="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#06C755] outline-none text-sm font-medium bg-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-0.5">ลิงก์ปลายทาง (URL)</label>
+                            <input type="url" value="${btn.uri}" oninput="updateButtonItem(${btn.id}, 'uri', this.value)" placeholder="https://..."
+                                class="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#06C755] outline-none text-sm bg-white">
+                        </div>
+                    </div>
+                `;
+                btnContainer.appendChild(div);
+            });
+        }
+
+        // ฟังก์ชันเพิ่ม/ลบ/แก้ไข ข้อความ
+        function addTextBlock() {
+            const newId = Date.now();
+            appState.texts.push({
+                id: newId,
+                text: "รายละเอียดเพิ่มเติม...",
+                color: "#4b5563",
+                size: "sm",
+                weight: "regular"
+            });
+            renderFormInputs();
+            updatePreview();
+        }
+
+        function removeTextBlock(id) {
+            appState.texts = appState.texts.filter(t => t.id !== id);
+            renderFormInputs();
+            updatePreview();
+        }
+
+        function updateTextItem(id, field, value) {
+            const item = appState.texts.find(t => t.id === id);
+            if (item) {
+                item[field] = value;
+                updatePreview();
+            }
+        }
+
+        // ฟังก์ชันเพิ่ม/ลบ/แก้ไข ปุ่มลิงก์
+        function addButtonBlock() {
+            const newId = Date.now();
+            appState.buttons.push({
+                id: newId,
+                label: "ปุ่มลิงก์ใหม่",
+                uri: "https://line.me",
+                style: "primary",
+                color: "#06C755"
+            });
+            renderFormInputs();
+            updatePreview();
+        }
+
+        function removeButtonBlock(id) {
+            appState.buttons = appState.buttons.filter(b => b.id !== id);
+            renderFormInputs();
+            updatePreview();
+        }
+
+        function updateButtonItem(id, field, value) {
+            const btn = appState.buttons.find(b => b.id === id);
+            if (btn) {
+                btn[field] = value;
+                // ปรับสีเริ่มต้นให้เหมาะสมเมื่อเปลี่ยนสไตล์ปุ่ม
+                if (field === 'style') {
+                    if (value === 'primary' && btn.color === '#e5e7eb') btn.color = '#06C755';
+                    if (value === 'secondary' && btn.color === '#06C755') btn.color = '#e5e7eb';
+                }
+                renderFormInputs();
+                updatePreview();
+            }
+        }
+
+        // อัปเดตหน้าจอพรีวิวและสร้างโค้ด JSON แบบเรียลไทม์
+        function updatePreview() {
+            // ดึงค่าล่าสุดจากฟอร์ม
+            appState.projectName = document.getElementById('projectName').value;
+            appState.showHero = document.getElementById('showHero').checked;
+            appState.heroUrl = document.getElementById('heroUrl').value.trim();
+            appState.heroRatio = document.getElementById('heroRatio').value;
+            appState.heroActionUrl = document.getElementById('heroActionUrl').value.trim();
+            appState.cardTitle = document.getElementById('cardTitle').value;
+            appState.titleColor = document.getElementById('titleColor').value;
+            appState.titleSize = document.getElementById('titleSize').value;
+
+            // ซ่อน/แสดง ตั้งค่ารูปภาพ
+            const heroSettings = document.getElementById('heroSettings');
+            const previewHeroWrapper = document.getElementById('previewHeroWrapper');
+            if (appState.showHero) {
+                heroSettings.classList.remove('opacity-50', 'pointer-events-none');
+                previewHeroWrapper.classList.remove('hidden');
+                
+                const img = document.getElementById('previewHeroImg');
+                img.src = appState.heroUrl || 'https://placehold.co/600x390/e2e8f0/64748b?text=No+Image';
+                
+                // ตั้งค่าสัดส่วนภาพในพรีวิว
+                const ratioMap = {
+                    '20:13': 'aspect-[20/13]',
+                    '16:9': 'aspect-video',
+                    '1:1': 'aspect-square',
+                    '4:3': 'aspect-[4/3]'
+                };
+                previewHeroWrapper.className = `w-full bg-gray-100 overflow-hidden relative ${ratioMap[appState.heroRatio] || 'aspect-[20/13]'}`;
+            } else {
+                heroSettings.classList.add('opacity-50', 'pointer-events-none');
+                previewHeroWrapper.classList.add('hidden');
+            }
+
+            // อัปเดตหัวข้อในการ์ดพรีวิว
+            const previewTitle = document.getElementById('previewTitle');
+            const sizeMap = { 'xs': 'text-xs', 'sm': 'text-sm', 'md': 'text-base', 'lg': 'text-lg', 'xl': 'text-xl', 'xxl': 'text-2xl' };
+            previewTitle.textContent = appState.cardTitle || 'หัวข้อการ์ด';
+            previewTitle.style.color = appState.titleColor;
+            previewTitle.className = `font-bold leading-snug break-words ${sizeMap[appState.titleSize] || 'text-xl'}`;
+
+            // อัปเดตข้อความเพิ่มเติมในการ์ดพรีวิว
+            const previewBodyTexts = document.getElementById('previewBodyTexts');
+            previewBodyTexts.innerHTML = '';
+            appState.texts.forEach(item => {
+                if (!item.text.trim()) return;
+                const p = document.createElement('p');
+                p.textContent = item.text;
+                p.style.color = item.color;
+                p.className = `whitespace-pre-line break-words leading-relaxed ${sizeMap[item.size] || 'text-sm'} ${item.weight === 'bold' ? 'font-bold' : 'font-normal'}`;
+                previewBodyTexts.appendChild(p);
+            });
+
+            // อัปเดตปุ่มในการ์ดพรีวิว
+            const previewFooter = document.getElementById('previewFooter');
+            previewFooter.innerHTML = '';
+            appState.buttons.forEach(btn => {
+                const a = document.createElement('a');
+                a.href = btn.uri || '#';
+                a.target = '_blank';
+                a.textContent = btn.label || 'ปุ่มกด';
+                a.className = 'block w-full text-center py-2.5 px-4 rounded-lg text-sm font-semibold transition truncate';
+                
+                if (btn.style === 'primary') {
+                    a.style.backgroundColor = btn.color;
+                    a.style.color = '#ffffff';
+                } else if (btn.style === 'secondary') {
+                    a.style.backgroundColor = btn.color;
+                    a.style.color = '#1f2937';
+                } else {
+                    a.style.backgroundColor = 'transparent';
+                    a.style.color = btn.color;
+                }
+                previewFooter.appendChild(a);
+            });
+
+            // สร้างโครงสร้าง LINE Flex Message JSON ที่ถูกต้องตามมาตรฐาน LINE
+            const flexJson = generateLineFlexJson();
+            document.getElementById('jsonOutput').value = JSON.stringify(flexJson, null, 2);
+
+            // บันทึกแบบร่างอัตโนมัติ (Auto-save draft)
+            localStorage.setItem('line_flex_autodraft', JSON.stringify(appState));
+        }
+
+        // สร้าง Object JSON ตามสเปคของ LINE Messaging API
+        function generateLineFlexJson() {
+            const bubble = {
+                type: "bubble"
+            };
+
+            // 1. ส่วน Hero (รูปภาพ)
+            if (appState.showHero && appState.heroUrl) {
+                bubble.hero = {
+                    type: "image",
+                    url: appState.heroUrl,
+                    size: "full",
+                    aspectRatio: appState.heroRatio,
+                    aspectMode: "cover"
+                };
+                if (appState.heroActionUrl && appState.heroActionUrl.startsWith('http')) {
+                    bubble.hero.action = {
+                        type: "uri",
+                        uri: appState.heroActionUrl
+                    };
+                }
+            }
+
+            // 2. ส่วน Body (ข้อความ)
+            const bodyContents = [];
+            if (appState.cardTitle) {
+                bodyContents.push({
+                    type: "text",
+                    text: appState.cardTitle,
+                    weight: "bold",
+                    size: appState.titleSize,
+                    color: appState.titleColor,
+                    wrap: true
+                });
+            }
+
+            appState.texts.forEach(t => {
+                if (t.text.trim()) {
+                    bodyContents.push({
+                        type: "text",
+                        text: t.text,
+                        size: t.size,
+                        color: t.color,
+                        weight: t.weight,
+                        wrap: true,
+                        margin: "md"
+                    });
+                }
+            });
+
+            if (bodyContents.length > 0) {
+                bubble.body = {
+                    type: "box",
+                    layout: "vertical",
+                    contents: bodyContents
+                };
+            }
+
+            // 3. ส่วน Footer (ปุ่มลิงก์)
+            const footerContents = [];
+            appState.buttons.forEach(btn => {
+                const validUri = (btn.uri && btn.uri.startsWith('http')) ? btn.uri : "https://line.me";
+                const btnObj = {
+                    type: "button",
+                    style: btn.style,
+                    height: "sm",
+                    action: {
+                        type: "uri",
+                        label: (btn.label || "คลิกที่นี่").substring(0, 20), // LINE จำกัดชื่อปุ่มสูงสุด 20 ตัวอักษร
+                        uri: validUri
+                    }
+                };
+                if (btn.style === 'primary' || btn.style === 'secondary') {
+                    btnObj.color = btn.color;
+                }
+                footerContents.push(btnObj);
+            });
+
+            if (footerContents.length > 0) {
+                bubble.footer = {
+                    type: "box",
+                    layout: "vertical",
+                    spacing: "sm",
+                    contents: footerContents
+                };
+            }
+
+            return bubble;
+        }
+
+        // คัดลอกโค้ด JSON ลงคลิปบอร์ด
+        function copyJsonCode() {
+            const jsonText = document.getElementById('jsonOutput');
+            jsonText.select();
+            jsonText.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                showToast('คัดลอกโค้ด Flex Message JSON เรียบร้อยแล้ว!');
+            } catch (err) {
+                showToast('ไม่สามารถคัดลอกได้ กรุณาคลุมดำแล้วกด Ctrl+C', true);
+            }
+        }
+
+        // บันทึกโปรเจกต์ปัจจุบันลง LocalStorage เพื่อกลับมาแก้ไขภายหลัง
+        function saveCurrentProject() {
+            const savedList = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const now = new Date().toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
+            
+            if (!appState.id) {
+                appState.id = 'proj_' + Date.now();
+            }
+
+            const projectRecord = {
+                ...JSON.parse(JSON.stringify(appState)),
+                updatedAt: now
+            };
+
+            const existingIndex = savedList.findIndex(p => p.id === appState.id);
+            if (existingIndex >= 0) {
+                savedList[existingIndex] = projectRecord;
+            } else {
+                savedList.unshift(projectRecord);
+            }
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(savedList));
+            updateSavedBadge();
+            showToast(`บันทึก "${appState.projectName}" เรียบร้อยแล้ว`);
+        }
+
+        // โหลดแบบร่างล่าสุดอัตโนมัติ
+        function loadAutoDraft() {
+            const draft = localStorage.getItem('line_flex_autodraft');
+            if (draft) {
+                try {
+                    appState = JSON.parse(draft);
+                } catch (e) {
+                    console.error("Draft parse error", e);
+                }
+            }
+        }
+
+        // อัปเดตตัวเลขจำนวนโปรเจกต์ที่บันทึกไว้
+        function updateSavedBadge() {
+            const savedList = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            document.getElementById('savedCountBadge').textContent = savedList.length;
+        }
+
+        // เปิดหน้าต่างรายการโปรเจกต์ที่บันทึกไว้
+        function openSavedModal() {
+            const savedList = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const container = document.getElementById('savedListContainer');
+            container.innerHTML = '';
+
+            if (savedList.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-400">
+                        <i class="fa-regular fa-folder-open text-4xl mb-2"></i>
+                        <p class="text-sm">ยังไม่มีโปรเจกต์ที่บันทึกไว้</p>
+                        <p class="text-xs mt-1">กดปุ่ม "บันทึกไว้แก้ไข" ด้านบนขวาเพื่อเก็บการ์ดของคุณ</p>
+                    </div>
+                `;
+            } else {
+                savedList.forEach(proj => {
+                    const item = document.createElement('div');
+                    item.className = 'p-3.5 border border-gray-200 rounded-xl hover:border-blue-400 transition flex items-center justify-between bg-gray-50';
+                    item.innerHTML = `
+                        <div class="min-w-0 flex-1 pr-3">
+                            <h4 class="font-bold text-gray-800 text-sm truncate">${proj.projectName || 'ไม่มีชื่อ'}</h4>
+                            <p class="text-xs text-gray-500 mt-0.5">แก้ไขล่าสุด: ${proj.updatedAt} • ${proj.buttons.length} ปุ่ม</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="loadProject('${proj.id}')" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition">
+                                เปิดแก้ไข
+                            </button>
+                            <button onclick="deleteProject('${proj.id}')" class="p-1.5 text-gray-400 hover:text-red-600 rounded-lg transition" title="ลบโปรเจกต์">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    `;
+                    container.appendChild(item);
+                });
+            }
+
+            document.getElementById('savedModal').classList.remove('hidden');
+            document.getElementById('savedModal').classList.add('flex');
+        }
+
+        // โหลดโปรเจกต์ที่เลือกขึ้นมาแก้ไข
+        function loadProject(id) {
+            const savedList = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const found = savedList.find(p => p.id === id);
+            if (found) {
+                appState = JSON.parse(JSON.stringify(found));
+                renderFormInputs();
+                updatePreview();
+                closeModal('savedModal');
+                showToast(`โหลด "${appState.projectName}" ขึ้นมาแก้ไขแล้ว`);
+            }
+        }
+
+        // ลบโปรเจกต์ที่บันทึกไว้
+        function deleteProject(id) {
+            let savedList = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            savedList = savedList.filter(p => p.id !== id);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(savedList));
+            updateSavedBadge();
+            openSavedModal();
+            showToast('ลบโปรเจกต์เรียบร้อยแล้ว');
+        }
+
+        // เปิดหน้าต่างนำเข้า JSON
+        function openImportModal() {
+            document.getElementById('importJsonInput').value = '';
+            document.getElementById('importModal').classList.remove('hidden');
+            document.getElementById('importModal').classList.add('flex');
+        }
+
+        // แปลงโค้ด JSON ที่นำเข้ากลับมาเป็นฟอร์มแก้ไข
+        function processImportJson() {
+            const raw = document.getElementById('importJsonInput').value.trim();
+            if (!raw) return;
+
+            try {
+                const parsed = JSON.parse(raw);
+                // รองรับทั้งแบบครอบด้วย type: flex และแบบ bubble ตรงๆ
+                const bubble = parsed.type === 'flex' ? parsed.contents : parsed;
+
+                if (!bubble || bubble.type !== 'bubble') {
+                    throw new Error('รูปแบบ JSON ไม่ใช่ Flex Message Bubble');
+                }
+
+                const newState = {
+                    id: null,
+                    projectName: "การ์ดที่นำเข้าจาก JSON",
+                    showHero: !!bubble.hero,
+                    heroUrl: bubble.hero?.url || "",
+                    heroRatio: bubble.hero?.aspectRatio || "20:13",
+                    heroActionUrl: bubble.hero?.action?.uri || "",
+                    cardTitle: "",
+                    titleColor: "#111827",
+                    titleSize: "xl",
+                    texts: [],
+                    buttons: []
+                };
+
+                // ดึงข้อความใน Body
+                if (bubble.body && Array.isArray(bubble.body.contents)) {
+                    bubble.body.contents.forEach((item, idx) => {
+                        if (item.type === 'text') {
+                            if (idx === 0 && item.weight === 'bold') {
+                                newState.cardTitle = item.text || "";
+                                newState.titleColor = item.color || "#111827";
+                                newState.titleSize = item.size || "xl";
+                            } else {
+                                newState.texts.push({
+                                    id: Date.now() + idx,
+                                    text: item.text || "",
+                                    color: item.color || "#4b5563",
+                                    size: item.size || "sm",
+                                    weight: item.weight || "regular"
+                                });
+                            }
+                        }
+                    });
+                }
+
+                // ดึงปุ่มใน Footer
+                if (bubble.footer && Array.isArray(bubble.footer.contents)) {
+                    bubble.footer.contents.forEach((item, idx) => {
+                        if (item.type === 'button' && item.action) {
+                            newState.buttons.push({
+                                id: Date.now() + 100 + idx,
+                                label: item.action.label || "ปุ่มกด",
+                                uri: item.action.uri || "https://line.me",
+                                style: item.style || "primary",
+                                color: item.color || (item.style === 'secondary' ? '#e5e7eb' : '#06C755')
+                            });
+                        }
+                    });
+                }
+
+                appState = newState;
+                renderFormInputs();
+                updatePreview();
+                closeModal('importModal');
+                showToast('นำเข้าโค้ด JSON สำเร็จ! สามารถแก้ไขต่อได้ทันที');
+            } catch (err) {
+                showToast('โค้ด JSON ไม่ถูกต้อง: ' + err.message, true);
+            }
+        }
+
+        // คืนค่าเริ่มต้น
+        function resetToDefault() {
+            appState = JSON.parse(JSON.stringify(defaultState));
+            renderFormInputs();
+            updatePreview();
+            showToast('รีเซ็ตการ์ดกลับเป็นค่าเริ่มต้นแล้ว');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+            document.getElementById(modalId).classList.remove('flex');
+        }
+    </script>
+</body>
+</html>
