@@ -410,23 +410,45 @@
             titleColor: "#111827",
             titleSize: "xl",
             texts: [
-                { id: 1, text: "กรอกข้อมูลเพื่อลงทะเบียนเข้าร่วมกิจกรรมฟรี! รับจำนวนจำกัด", color: "#4b5563", size: "sm", weight: "regular" },
-                { id: 2, text: "📅 ปิดรับสมัคร: 30 พฤศจิกายน นี้", color: "#06C755", size: "xs", weight: "bold" }
+                {
+                    id: 1,
+                    text: "เปิดรับลงทะเบียนตั้งแต่วันนี้เป็นต้นไป กรอกข้อมูลสมัครและตรวจสอบรายชื่อผู้สมัครได้ทันทีผ่านปุ่มด้านล่าง",
+                    color: "#4b5563",
+                    size: "sm",
+                    weight: "regular"
+                }
             ],
             buttons: [
-                { id: 101, label: "📝 กรอกข้อมูลสมัคร", uri: "https://forms.google.com/", style: "primary", color: "#06C755" },
-                { id: 102, label: "📋 ดูรายชื่อผู้สมัครทั้งหมด", uri: "https://docs.google.com/spreadsheets/", style: "secondary", color: "#e5e7eb" },
-                { id: 103, label: "📤 แชร์การ์ดนี้ให้เพื่อน", uri: "https://liff.line.me/", style: "link", color: "#2563eb" }
+                {
+                    id: 101,
+                    label: "📝 กรอกข้อมูลสมัคร",
+                    uri: "https://forms.google.com",
+                    style: "primary",
+                    color: "#06C755"
+                },
+                {
+                    id: 102,
+                    label: "📋 ดูรายชื่อผู้สมัครทั้งหมด",
+                    uri: "https://docs.google.com/spreadsheets",
+                    style: "secondary",
+                    color: "#e5e7eb"
+                },
+                {
+                    id: 103,
+                    label: "📤 แชร์การ์ดนี้ให้เพื่อน",
+                    uri: "https://liff.line.me",
+                    style: "link",
+                    color: "#2563eb"
+                }
             ]
         };
 
-        // สถานะปัจจุบันของแอปพลิเคชัน
         let appState = JSON.parse(JSON.stringify(defaultState));
         const STORAGE_KEY = 'line_flex_builder_projects_v1';
         const LIFF_ID_KEY = 'line_flex_builder_liff_id';
-        let autoSharePayload = null; // เก็บข้อมูลการ์ดที่ถอดรหัสจากลิงก์แชร์
+        let autoSharePayload = null;
 
-        // เข้ารหัสข้อมูลเป็น Base64 รองรับภาษาไทย
+        // เข้ารหัสข้อมูลเป็น Base64 รองรับภาษาไทย (แบบบีบอัดคีย์ให้สั้นที่สุดเพื่อไม่ให้เกินลิมิต URL ของ LINE)
         function encodeShareData(obj) {
             const jsonStr = JSON.stringify(obj);
             return btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode('0x' + p1)));
@@ -452,17 +474,27 @@
                 if (!liffIdParam) liffIdParam = stateParams.get('liffId');
             }
 
-            // หากเปิดจากปุ่ม "แชร์ให้เพื่อน" ให้เข้าสู่โหมดแชร์ทันที (ซ่อนหน้าสร้างการ์ด)
-            if (shareParam) {
+            // ตรวจสอบข้อมูลค้างจากตอนเด้งไปล็อกอิน LINE ใน Chrome (สำคัญมากสำหรับ Chrome!)
+            const pendingShareRaw = sessionStorage.getItem('pending_line_autoshare');
+
+            if (shareParam || pendingShareRaw) {
                 try {
-                    autoSharePayload = decodeShareData(shareParam);
-                    if (liffIdParam) autoSharePayload.liffId = liffIdParam;
+                    if (shareParam) {
+                        autoSharePayload = decodeShareData(shareParam);
+                        if (liffIdParam) autoSharePayload.liffId = liffIdParam;
+                        // บันทึกสำรองไว้เผื่อต้องเด้งไปหน้าล็อกอินใน Chrome
+                        sessionStorage.setItem('pending_line_autoshare', JSON.stringify(autoSharePayload));
+                    } else if (pendingShareRaw) {
+                        autoSharePayload = JSON.parse(pendingShareRaw);
+                    }
+
                     document.getElementById('autoShareOverlay').classList.remove('hidden');
                     document.getElementById('autoShareOverlay').classList.add('flex');
                     executeAutoShareMode();
                     return; // หยุดการโหลดหน้าแก้ไขปกติ
                 } catch (e) {
                     console.error('ถอดรหัสลิงก์แชร์ไม่สำเร็จ:', e);
+                    sessionStorage.removeItem('pending_line_autoshare');
                 }
             }
 
@@ -478,7 +510,7 @@
             }
         };
 
-        // ทำงานในโหมดแชร์อัตโนมัติ (เมื่อเพื่อนกดปุ่มแชร์ในแชต LINE)
+        // ทำงานในโหมดแชร์อัตโนมัติ (เมื่อกดปุ่มแชร์ใน Chrome หรือแชต LINE)
         async function executeAutoShareMode() {
             if (!autoSharePayload || !autoSharePayload.liffId) {
                 document.getElementById('autoShareTitle').textContent = 'ไม่พบข้อมูล LIFF ID ในลิงก์';
@@ -493,18 +525,30 @@
             try {
                 btnRetry.disabled = true;
                 titleEl.textContent = 'กำลังเชื่อมต่อ LINE...';
-                descEl.textContent = 'กรุณารอสักครู่ ระบบกำลังเปิดหน้าต่างเลือกเพื่อนหรือกลุ่มไลน์';
+                descEl.textContent = 'กรุณารอสักครู่ ระบบกำลังตรวจสอบการเข้าสู่ระบบ LINE ของคุณ';
 
                 await liff.init({ liffId: autoSharePayload.liffId });
 
+                // หากเปิดใน Chrome และยังไม่ได้ล็อกอิน LINE ให้พาไปหน้าล็อกอินก่อน
                 if (!liff.isLoggedIn()) {
-                    liff.login({ redirectUri: window.location.href });
+                    titleEl.textContent = 'กำลังพาท่านไปเข้าสู่ระบบ LINE...';
+                    descEl.textContent = 'กรุณาล็อกอินบัญชี LINE ของคุณ จากนั้นระบบจะกลับมาหน้าแชร์อัตโนมัติ';
+                    sessionStorage.setItem('pending_line_autoshare', JSON.stringify(autoSharePayload));
+                    // ใช้ URL ปัจจุบันที่ตัด query ยาวๆ ออกเพื่อป้องกัน Error Redirect URI Mismatch
+                    const cleanRedirectUrl = window.location.origin + window.location.pathname;
+                    liff.login({ redirectUri: cleanRedirectUrl });
                     return;
                 }
 
+                // ล็อกอินสำเร็จแล้ว ล้างค่าชั่วคราวออก
+                sessionStorage.removeItem('pending_line_autoshare');
+
                 if (!liff.isApiAvailable('shareTargetPicker')) {
-                    throw new Error('กรุณาเปิดใช้งาน Share Target Picker ใน LINE Developers Console');
+                    throw new Error('กรุณาเปิดใช้งาน Share Target Picker ใน LINE Developers Console (แท็บ LIFF)');
                 }
+
+                titleEl.textContent = 'พร้อมแชร์การ์ดแล้ว';
+                descEl.textContent = 'กำลังเปิดหน้าต่างเลือกเพื่อนหรือกลุ่มไลน์...';
 
                 const messages = [{
                     type: 'flex',
@@ -515,7 +559,7 @@
                 const res = await liff.shareTargetPicker(messages);
                 if (res) {
                     titleEl.textContent = '✅ แชร์การ์ดเรียบร้อยแล้ว!';
-                    descEl.textContent = 'คุณสามารถปิดหน้าต่างนี้เพื่อกลับสู่แชต LINE ได้ทันที';
+                    descEl.textContent = 'ส่งการ์ดไปยังแชต LINE เรียบร้อย คุณสามารถปิดหน้านี้ได้ทันที';
                     if (liff.isInClient()) {
                         setTimeout(() => liff.closeWindow(), 1200);
                     }
@@ -533,6 +577,7 @@
 
         // ออกจากโหมดแชร์อัตโนมัติเพื่อกลับมาแก้ไขการ์ด
         function exitAutoShareMode() {
+            sessionStorage.removeItem('pending_line_autoshare');
             document.getElementById('autoShareOverlay').classList.add('hidden');
             document.getElementById('autoShareOverlay').classList.remove('flex');
             window.history.replaceState({}, document.title, window.location.pathname);
@@ -641,15 +686,27 @@
                 statusBox.textContent = 'กำลังเริ่มต้นระบบ LINE LIFF...';
                 statusBox.className = 'p-3 rounded-xl text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 block';
 
+                // เตรียมข้อมูลการ์ดสำรองไว้ใน sessionStorage เผื่อต้องกระโดดไปล็อกอินใน Chrome
+                const flexBubble = generateLineFlexJson();
+                sessionStorage.setItem('pending_line_autoshare', JSON.stringify({
+                    liffId: liffId,
+                    altText: altText,
+                    bubble: flexBubble
+                }));
+
                 // 1. เริ่มต้นการทำงานของ LIFF
                 await liff.init({ liffId: liffId });
 
-                // 2. ตรวจสอบการล็อกอิน LINE (หากเปิดบนเบราว์เซอร์ปกติจะให้ล็อกอินก่อน)
+                // 2. ตรวจสอบการล็อกอิน LINE (หากเปิดบน Chrome จะพาไปล็อกอินก่อน แล้วเด้งกลับมาแชร์อัตโนมัติ)
                 if (!liff.isLoggedIn()) {
                     statusBox.textContent = 'กำลังพาท่านไปหน้าเข้าสู่ระบบ LINE...';
-                    liff.login({ redirectUri: window.location.href });
+                    const cleanRedirectUrl = window.location.origin + window.location.pathname;
+                    liff.login({ redirectUri: cleanRedirectUrl });
                     return;
                 }
+
+                // ล็อกอินแล้ว ล้างค่าสำรอง
+                sessionStorage.removeItem('pending_line_autoshare');
 
                 // 3. ตรวจสอบว่าเปิดใช้งาน Share Target Picker ใน Console หรือยัง
                 if (!liff.isApiAvailable('shareTargetPicker')) {
@@ -657,7 +714,6 @@
                 }
 
                 // 4. เตรียมโครงสร้างข้อความ Flex Message
-                const flexBubble = generateLineFlexJson();
                 const messages = [
                     {
                         type: 'flex',
@@ -679,6 +735,7 @@
 
             } catch (error) {
                 console.error('LIFF Share Error:', error);
+                sessionStorage.removeItem('pending_line_autoshare');
                 statusBox.innerHTML = `❌ เกิดข้อผิดพลาด: ${error.message || error}<br><span class="text-[11px] opacity-80">* ตรวจสอบว่า URL ของหน้าเว็บนี้ตรงกับ Endpoint URL ที่ตั้งไว้ใน LINE Developers Console</span>`;
                 statusBox.className = 'p-3 rounded-xl text-xs font-medium bg-red-50 text-red-700 border border-red-200 block';
             } finally {
